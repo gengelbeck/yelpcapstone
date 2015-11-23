@@ -1,0 +1,63 @@
+---
+title: "Merge Review Data"
+author: "gengelb"
+date: "November 20, 2015"
+output: html_document
+---
+
+## Load the Data
+```{r LoadData}
+setwd("~/Documents/R/Capstone/final2/merge")
+load("../data/reviews.RData")
+load("../data/users.RData")
+load("../data/businesses.RData")
+```
+
+## Combine reviews and users data
+```{r MergeData}
+# reviews$biz.open <- 0
+# reviews$biz.stars <- 0
+# reviews$biz.review.count <- 0
+# 
+# row.names(businesses) <- businesses$business_id
+# 
+# for (r in 1:nrow(reviews)) {
+#   brow <- businesses[reviews$business_id[r], ]
+#   reviews$biz.open <- brow$open
+#   reviews$biz.stars <- brow$stars
+#   reviews$biz.review.count <- brow$review_count
+# }
+
+biz <- businesses[,c(1,4,5,7)]
+
+ds <- merge(reviews, biz, by="business_id")
+ds <- merge(ds, users, by="user_id")
+nrow(ds)
+
+# ds$biz.open <- unlist(lapply(ds$business_id, function(x) businesses$open[businesses$business_id == x]))
+# ds$biz.stars <- unlist(lapply(ds$business_id, function(x) businesses$stars[businesses$business_id == x]))
+# ds$biz.review.count <- unlist(lapply(ds$business_id, function(x) businesses$review_count[businesses$business_id == x]))
+
+quantile(ds$votes, probs = seq(0,1,0.01))
+
+bucket.votes <- function(votes) {
+  if (votes == 0) return("low")
+  if (votes < 10) return("moderate")
+  if (votes > 9) return("high")
+  return(NA)
+}
+
+ds$vote.category <- unlist(lapply(ds$votes, bucket.votes))
+
+names(ds)[5:8] <- c("review.stars", "review.votes.funny", "review.votes.useful", "review.votes.cool")
+names(ds)[26:28] <- c("biz.stars", "biz.review.count", "biz.open")
+names(ds)[29:33] <- c("reviewer.review.count", "reviewer.stars", "reviewer.votes.funny","reviewer.votes.useful", "reviewer.votes.cool")
+
+ds <- ds[,c(1:9,11:42,10)]
+
+save(ds, file="../data/ds.RData")
+```
+
+
+
+

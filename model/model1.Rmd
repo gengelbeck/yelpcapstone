@@ -1,0 +1,209 @@
+---
+title: What Makes a Review Valuable? - Predicting the Value of Yelp Reviews to Review
+  Readers
+output:
+  pdf_document: default
+  html_document:
+    keep_md: yes
+date: "November 22, 2015"
+---
+
+# Introduction
+What makes a Yelp review valueable to review readers. The Yelp allows readers to rate reviews as useful, funny, or cool. This analysis uses these votes as a measure of review value: reviews with more reviewer votes should reflect the value of that review to readers.
+
+Using the [*Yelp Academice Dataset*](http://www.yelp.com/dataset_challenge) I set out to predict the what makes a Yelp review more or less valuable than a different review. My goal was to create a model that did well and classifing reveiws but was easily understandable and could be used as guidance for review writers.
+
+#### Findings
+Using a tree model I was able to correctly classify 65 percent of reviews in my validation data set correctly: A 16 percent improvement over a *no information* model.
+
+The final model suggests that the content of reviews dominates review reader voting and that review writers should focus first on writting *useful* reviews and then *cool* reviews.
+
+# Methods
+
+## Data Collection
+
+My analysis used the *Yelp Academic Dataset*. This dataset contains reviews, business, and user data from Yelp for four cities. It focused on reviews, reviewers, and reviewed businesses in the [Yelp dataset](http://www.yelp.com/dataset_challenge). (Details about this dataset are available at the [Yelp Dataset Challenge](http://www.yelp.com/dataset_challenge) where the data set is available for download.)
+
+I used the Yelp data to compute predictor and outcome variable (reader vote counts) and predictor data:
+
+- **review data** - word counts, positive and negative sentiment word counts
+- **reviewer data** -  mean votes mean funny, cool, and useful votes per review, friend count, years as a Yelp Elite member, if they are a Yelp Elite 2015 member, and 
+- **business data** - whether the buisiness is open, average business star rating, and number of checkins the business has recevied.
+
+```{r LoadData, echo=FALSE}
+## Load training dataset
+setwd("~/Documents/R/Capstone/final2/model")
+load("../data/train.RData")
+```
+
+```{r LoadLibraries, echo=FALSE}
+## Load the libraries
+library(ggplot2)
+library(caret)
+library(xtable)
+library(rattle)
+```
+
+## Splitting the dataset
+I partitioned the original data set into two separate data sets: a training set with about 80 percent of the observations, and validation data set containing about 20 percent of the observations. The validation data set was used to test the prediction accuracy of the final model.
+
+The training data set was divided into *train dataset* and a *test dataset* with about 80 percent of the training cases being assigned to the *train dataset*.
+
+```{r Split, echo=FALSE}
+train_set <- createDataPartition(y=train.ds$vote.category, p=0.7, list=FALSE)
+trainDS <- train.ds[train_set,]
+testDS <- train.ds[-train_set,]
+```
+
+## Exploratory Analysis
+
+### Variables of no practical value
+First I removed variables of no practical value. These were variables like IDs and names of the businesses, review writers, and reviews.
+
+### Distribution of Review Votes
+
+The distribution of review votes is highly skewed with over 40 percent of reviews getting zero votes. The distribution of votes also showed a long tail with reviews getting almost 250 votes. 
+
+```{r HistOfVotes, echo=FALSE, fig.height=4, fig.width=4}
+qplot(testDS$votes,
+      geom="histogram",
+      binwidth = 0.8,  
+      main = "Histogram for Review Votes", 
+      xlab = "Review Votes", 
+      ylab = "Count of Reviews",  
+      fill=I("blue"), 
+      col=I("blue"), 
+      alpha=I(.2),
+      xlim=c(0,250))
+```
+
+I categorized review votes in to three categories: **low** - reviews receiving no votes (47% of the reviews), **moderate** - reviews receiving between 1 and 9 votes (49% of the reviews), and **high** - reviews receiving 10 or more votes (4% of the reviews).
+
+```{r Table, echo=FALSE}
+round(prop.table(table(trainDS$vote.category)),2)
+```
+
+## Predictor filtering
+
+### Elimiate near-zero varability covariates
+I checked to see if the data had covariates with near-zero variability. The data did not have any, so no covariates were eliminated due to non-zero variability.
+
+```{r NZCovariateElimination, echo=FALSE}
+nzvars <- nearZeroVar(trainDS[1:(length(trainDS) - 2)])
+names(trainDS)[nzvars]
+if (length(nzvars > 0)) trainDS <- trainDS[,-nzvars]
+```
+
+### Elminate unneeded corvariates
+Given a number of highly correlated predictors, I set out to eliminating unneeded covariates. I used the procedure suggested by Kuhn & Johnson (2013) p. 47 for reducing the effects of multicollinearity. Using this procedure, the *average votes a reviewer recieves* was removed. This left 16 predictor variables.
+
+```{r RemoveHightCorrelates, echo=FALSE}
+# Kuhn & Johnson (2013) p. 47
+trainDS$biz.open <- ifelse(trainDS$biz.open, 1, 0)
+highCorr <- cor(trainDS[1:(length(trainDS) - 2)])
+highCorr <- findCorrelation(highCorr, cutoff=0.90)
+names(trainDS)[highCorr]
+trainDS <- trainDS[, -highCorr]
+```
+
+### Correlation of remaining predictors
+```{r echo=FALSE}
+#library(corrplot)
+#corrplot(cor(trainDS[1:(length(trainDS) - 2)]), order="hclust")
+#featurePlot(train.ds, y=train.ds, plot="pairs")
+```
+
+# Train model
+
+I used a tree model to predict reviewer vote categories (*low*, *moderate*, *high*). I selected a tree model because I wanted a model that could be easily understood by review writers and predict reivew votes that had a long-tailed distribution.
+
+```{r TrainModel, echo=FALSE, fig.width=6, fig.height=6}
+trainDS$biz.open <- ifelse(trainDS$biz.open == 1, "true", "false")
+
+m0 <- vote.category ~ review.stars + review.pos + review.neg + word.count + 
+          biz.stars + biz.review.count + biz.open +
+          reviewer.review.count + reviewer.stars + friend.count + elite.count +
+          elite2015 + yelping.months + average.votes.funny + average.votes.useful + average.votes.cool
+          
+
+model0 <- train(m0, method="rpart", data=trainDS)
+
+model0$finalModel
+
+fancyRpartPlot(model0$finalModel, main="Yelp Review Vote Classification Tree")
+
+png(filename="tree.png")
+fancyRpartPlot(model0$finalModel, main="Yelp Review Vote Classification Tree")
+dev.off()
+```
+
+### Importance of predictors for simple model
+```{r PredictorImportance, echo=FALSE}
+top <- varImp(model0$finalModel)
+top$names <- rownames(top)
+foo <- top[with(top, order(-Overall)),] 
+row.names(foo) <- 1:nrow(foo)
+foo$Proportion <- round(foo$Overall / sum(top$Overall),2)
+foo
+```
+
+#### Fit for the train data set
+The final tree model had about a 65.5 percent accuracy rate compared with a *no information* accuracy rate of 48.8 percent (a 16.7 percent improvement over *no information*). I accepted the model and applied it to the test data set.
+```{r echo=FALSE}
+predictions_test <- predict(model0, trainDS, type="raw")
+# summarize results
+confusionMatrix(predictions_test, trainDS$vote.category)
+```
+
+#### Predictions for the test data set
+The tree model had a 65.5 percent accuracy rate for the test data. I accepted the model and applied it to the validation data set.
+```{r echo=FALSE}
+predictions_test <- predict(model0, testDS, type="raw")
+# summarize results
+confusionMatrix(predictions_test, testDS$vote.category)
+```
+
+#### Predictions for the validation data set
+The tree model had a 65.6 percent did not show a drop in prediction accuracy. I accepted this as my model for submission and I next applied it to the 313,850 validation test cases. The tree model had an accuracy of 65.6 percent when predicting the validatation data. (*No information* had a 48.9 percent accuracy rate.)
+```{r echo=FALSE}
+load("../data/validate.RData")
+predictions_validate <- predict(model0, validate.ds, type="raw")
+cm <- confusionMatrix(predictions_validate, validate.ds$vote.category)
+```
+
+# Results
+
+I created a tree model that was able to correctly classify about 65 percent of the
+reviewer votes categories in the validation data set. The table below presents the confusion matrix as proportions for the final tree model when applied to the validation data set.
+
+```{r echo=FALSE, results='asis'}
+t <- round(prop.table(cm$table),2)
+print(xtable(t), type="html")
+```
+
+The confusion matrix shows that most prediction confusions occurred when predicting *low* and *moderate* reviews with 87 percent of misclassifications being confusions between low and moderate reviews.
+
+# Discussion
+
+### Advice for Review writers
+The final tree model suggests that the content of reviews dominates review reader voting and that review writers should focus first on writing *useful* reviews and then *cool* reviews. A follow-up question is "What makes a review cool?". I don't know. If review votes are cast after a review is read but before the reader has interacted with the business, *entertainment* may be a big factor. Clearly, what makes a review *cool* needs to be better understood.
+
+### Next Steps
+- Find a better way to model data with a vast number of zeros and a wide range of values.
+- Understand what distinguishes *cool reviews* from other reviews.
+
+# References
+[1] Kuhn, M., & Johnson, K. (2013). *Applied Predictive Modeling*. Springer: New York.
+
+[2] The data set I used was originally downloaded from [Yelp Dataset Challenge](http://www.yelp.com/dataset_challenge) on November 15, 2015.
+
+[3] Liaw, A., & Wiener, M., Classification and Regression by randomForest. R News: The
+Newsletter of the R Project, 18-22, [http://cran.r-project.org/doc/Rnews/Rnews_2002-3.pdf](http://cran.r-project.org/doc/Rnews/Rnews_2002-3.pdf), December, 2002.
+
+[4] GEngelbeck (22 Nov. 2015). [*Making Yelp Reviews Valuable to Readers?*](http://rpubs.com/gengelbeck/yelpwritreradvice). [RPubs](http://rpubs.com).
+
+[5] GEngelbeck (22 Nov. 2015). [Making Yelp Reviews Valuable to Readers?: R Project files](https://github.com/gengelbeck/yelpcapstone.git)
+
+```{r echo=FALSE}
+save.image("model.Rdata")
+```

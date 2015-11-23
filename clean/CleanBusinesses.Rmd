@@ -1,0 +1,62 @@
+---
+title: "Clean Business Data"
+author: "gengelb"
+date: "November 2, 2015"
+output: html_document
+---
+
+## Clean the business data
+
+The Yelp business data has the following structure:
+```
+{
+    'type': 'business',
+    'business_id': (encrypted business id),
+    'name': (business name),
+    'neighborhoods': [(hood names)],
+    'full_address': (localized address),
+    'city': (city),
+    'state': (state),
+    'latitude': latitude,
+    'longitude': longitude,
+    'stars': (star rating, rounded to half-stars),
+    'review_count': review count,
+    'categories': [(localized category names)]
+    'open': True / False (corresponds to closed, not business hours),
+    'hours': {
+        (day_of_week): {
+            'open': (HH:MM),
+            'close': (HH:MM)
+        },
+        ...
+    },
+    'attributes': {
+        (attribute_name): (attribute_value),
+        ...
+    },
+}
+```
+The data were converted from *yelp_academic_dataset_business.json* to *reviews.cvs* using the jso2csv command with the following arguements.
+```
+json2csv -k business_id,type,name,stars,review_count,categories,open,city,state,attributes  -i yelp_academic_dataset_business.json -o businesses.csv
+```
+
+The *wc -l* commands shows that there are 366715 users
+```
+wc -l yelp_academic_dataset_business.json
+61184 yelp_academic_dataset_business.json
+```
+
+### Read in the *businesses.csv* file.
+```{r}
+setwd("~/Documents/R/Capstone/final2/clean")
+businesses <- read.csv("../../Analysis/data/businesses.csv", header=FALSE, stringsAsFactors=FALSE)
+
+names(businesses) <- c("business_id", "type", "name", "stars", "review_count", "categories", "open", "city", "state", "attributes")
+```
+
+### Save the data set
+```{r}
+save(businesses, file="../data/businesses.RData")
+```
+

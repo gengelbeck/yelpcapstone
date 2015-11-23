@@ -1,0 +1,55 @@
+---
+title: "Split Yelp Dataset"
+author: "gengelb"
+date: "November 20, 2015"
+output: html_document
+---
+
+## Split the Yelp the analysis data set into a training and validation dataset
+
+### Load the dataset
+```{r Load}
+setwd("~/Documents/R/Capstone/final2/split")
+load("../data/ds.RData")
+```
+
+## Load the libraries
+```{r}
+library(caret)
+```
+
+### Remove variables that we will not be using for creating a model.
+```{r Clean}
+ds$user_id <- NULL
+ds$review_id <- NULL
+ds$business_id <- NULL
+ds$date <- NULL
+ds$review.votes.cool <- NULL
+ds$review.votes.useful <- NULL
+ds$review.votes.funny <- NULL
+ds$reviewer.votes.cool <- NULL
+ds$reviewer.votes.useful<- NULL
+ds$reviewer.votes.funny <- NULL
+ds$text <- NULL
+
+#names(ds)[18:ncol(ds)] <- unlist(lapply(names(ds)[18:ncol(ds)], function(x) paste0("reviewer.", x)))
+
+nzvars <- nearZeroVar(ds[1:length(ds) - 1])
+names(ds)[nzvars]
+if (length(nzvars > 0)) ds <- ds[,-nzvars]
+```
+
+### Split the dataset
+```{r Split}
+inTrain <- createDataPartition(y=ds$votes, p=0.80, list=FALSE)
+train.ds <- ds[inTrain,]
+validate.ds <- ds[-inTrain,]
+```
+
+### Save the dataset
+```{r Save}
+save(train.ds, file="../data/train.RData")
+save(validate.ds, file="../data/validate.RData")
+```
+
+

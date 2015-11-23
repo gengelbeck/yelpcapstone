@@ -1,0 +1,81 @@
+---
+title: "Clean Review Data"
+author: "gengelb"
+date: "November 1, 2015"
+output: html_document
+---
+
+## Clean the review data
+
+The data were converted from *yelp_academic_dataset_review.json* to *reviews.cvs* using the jso2csv command with the following arguements.
+```
+json2csv -k user_id,review_id,business_id,date,type,stars,votes.funny,votes.useful,votes.cool,text  -i yelp_academic_dataset_review.json -o reviews.csv
+
+{
+    'type': 'review',
+    'business_id': (encrypted business id),
+    'user_id': (encrypted user id),
+    'stars': (star rating, rounded to half-stars),
+    'text': (review text),
+    'date': (date, formatted like '2012-03-14'),
+    'votes': {(vote type): (count)},
+}
+```
+
+The *wc -l* commands shows that there are 1569264 reviews.
+```
+> wc -l yelp_academic_dataset_review.json
+1569264 yelp_academic_dataset_review.json
+```
+
+### Read in the *reviews.csv* file.
+```{r}
+setwd("~/Documents/R/Capstone/final2/clean")
+reviews <- read.csv("../../Analysis/data/reviews.csv", header=FALSE, stringsAsFactors=FALSE)
+
+names(reviews) <- c("user_id", "review_id", "business_id", "date", "type", "stars", "votes.funny", "votes.useful", "votes.cool", "text")
+
+reviews$type <- NULL
+reviews$votes <- reviews$votes.cool + reviews$votes.funny + reviews$votes.useful
+```
+
+### Count the links in a review
+```{r}
+library(stringr)
+
+reviews$links <- str_count(reviews$text, "(http(s)?://)")
+image_url_pattern <- "http(?:([^:/?#]+):)?(?://([^/?#]*))?([^?#]*\\.(?:jpg|gif|png))(?:\\?([^#]*))?(?:#(.*))?"
+reviews$images <- str_count(reviews$text, image_url_pattern)
+reviews$bizphotos <- str_count(reviews$text, "http://www.yelp.com/biz_photos/")
+reviews$localphotos <- str_count(reviews$text, "http://www.yelp.com/user_local_photos")
+reviews$flickrphotos <- str_count(reviews$text, "http://www.flickr.com/photos/")
+#reviews$bingimages <- str_count(reviews$text, "http://www.bing.com/images/")
+reviews$bizlinks <- str_count(reviews$text, "http://www.yelp.com/biz/")
+reviews$supr <- str_count(reviews$text, "http://su.pr/")
+reviews$bitly <- str_count(reviews$text, "http://bit.ly/")
+reviews$tweets <- str_count(reviews$text, "http://twitter.com/")
+reviews$tripadvisor <- str_count(reviews$text, "www.tripadvisor.com")
+reviews$wikipedia <- str_count(reviews$text, "http://en.wikipedia.org/")
+reviews$google <- str_count(reviews$text, "http://www.google.com/url")
+```
+
+### Score the sentiment of the reviews
+```{r}
+source('../sentiment/sentiment.R')
+hu.liu.pos = scan('../sentiment/positive-words.txt', what='character', comment.char=';')
+hu.liu.neg = scan('../sentiment/negative-words.txt', what='character', comment.char=';')
+
+reviews[,c('review.pos','review.neg')] <- score.sentiment(reviews$text, hu.liu.pos, hu.liu.neg)[,1:2]
+
+word.count <- function(text) {
+  return(length(unlist(gregexpr("[A-z]\\W+", text))) + 1L)
+}
+
+reviews$word.count <- unlist(lapply(reviews$text, function(x) word.count(x)))
+```
+
+### Save the data set
+```{r}
+save(reviews, file="../data/reviews.RData")
+```
+
